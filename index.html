@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>First Robotics Field</title>
+        <style>
+            canvas {
+                border: 1px solid black;
+            }
+            body {
+                background-color: #000000;
+                color: #ffffff;
+
+            }
+            .widget {
+                background: gray;
+                width: 200px;
+                border-color: white;
+                border-style: solid;
+                padding: 5px;
+                text-align: center;
+                margin: 5px;
+            }
+            .widget input {
+                width: 50px;
+            }
+            #widgets {
+                display: flex;
+                margin: 10px;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Quick Easy Frc Field Viewer</h1>
+        <canvas id="canvas" width="1000" height="484"></canvas>
+        <div id="widgets">
+            <div class="widget">
+                <h3>Move To Position</h3>
+                <label for="moveToPosX">X:</label>
+                <input type="number" id="moveToPosX" name="x" value="0" step="1">
+                <label for="moveToPosY">Y:</label>
+                <input type="number" id="moveToPosY" name="y" value="0" step="1">
+                <br/>
+                <label for="moveToPosAngle">Angle:</label>
+                <input type="number" id="moveToPosAngle" name="angle" value="0" step="1">
+                <br/>
+                <label for="moveSpeed">Move Speed:</label>
+                <input type="number" id="moveSpeed" name="moveSpeed" value="1" step="1">
+                <br/>
+                <label for="turnSpeed">Turn Speed:</label>
+                <input type="number" id="turnSpeed" name="turnSpeed" value="3" step="1">
+                <br/>
+                <button onclick="goToPosition(Number(document.getElementById('moveToPosX').value), Number(document.getElementById('moveToPosY').value), Number(document.getElementById('moveToPosAngle').value), Number(document.getElementById('moveSpeed').value), Number(document.getElementById('turnSpeed').value))">Move</button>
+            </div>
+            <div class="widget">
+                <h3>Set Position</h3>
+                <label for="setPosX">X:</label>
+                <input type="number" id="setPosX" name="x" value="0" step="1">
+                <br/>
+                <label for="setPosY">Y:</label>
+                <input type="number" id="setPosY" name="y" value="0" step="1">
+                <br/>
+                <label for="setPosAngle">Angle:</label>
+                <input type="number" id="setPosAngle" name="angle" value="0" step="1">
+                <br/>
+                <button onclick="setPos(Number(document.getElementById('setPosX').value), Number(document.getElementById('setPosY').value), Number(document.getElementById('setPosAngle').value))">Set</button>
+            </div>
+            <div class="widget">
+                <h3>Auto Place Test</h3>
+                <button onclick="autoPlaceCommand()">Auto Place Test</button>
+            </div>
+            <div class="widget">
+                <h3>Robot Settings</h3>
+                <label for="robotWidth">Robot Width:</label>
+                <input type="number" id="robotWidth" name="robotWidth" value="0.5" step="0.1">
+                <br/>
+                <label for="robotHeight">Robot Height:</label>
+                <input type="number" id="robotHeight" name="robotHeight" value="0.5" step="0.1">
+                <br/>
+                <button onclick="setRobotSize(Number(document.getElementById('robotWidth').value), Number(document.getElementById('robotHeight').value))">Set</button>
+            </div>
+        </div>
+        <div id="coords" style="position:absolute; bottom:10px; right:10px;"></div>
+        <script>
+            const canvas = document.getElementById("canvas");
+            const ctx = canvas.getContext("2d");
+
+            const FIELD_WIDTH_M = 16.5;
+            const FIELD_HEIGHT_M = 8;
+            const CANVAS_WIDTH_PX = canvas.width;
+            const CANVAS_HEIGHT_PX = canvas.height;
+            const PIXELS_PER_METER = CANVAS_WIDTH_PX / FIELD_WIDTH_M;
+            let posToGo = {x: 0, y: 0, angle: 0};
+            let movingToPos = false;
+
+
+            var background = new Image();
+            background.src = "https://github.com/mjansen4857/pathplanner/blob/main/images/field23.png?raw=true";
+
+
+            const robot = {
+                x: 0,
+                y: 0,
+                angle: 0,
+                width: 0.5,
+                height: 0.5,
+                xSpeed: 0,
+                ySpeed: 0,
+                turnSpeed: 0,
+                armExtended: false,
+                draw: function () {
+                    const x = this.x * PIXELS_PER_METER;
+                    const y = CANVAS_HEIGHT_PX - this.y * PIXELS_PER_METER;
+                    const width = this.width * PIXELS_PER_METER;
+                    const height = this.height * PIXELS_PER_METER;
+                    ctx.drawImage(background, 0, 0, CANVAS_WIDTH_PX, CANVAS_HEIGHT_PX);
+
+                    // draw the red box
+                    ctx.save();
+                    ctx.translate(x, y);
+                    ctx.rotate(this.angle + Math.PI / 2);
+                    ctx.fillStyle = "red";
+                    ctx.fillRect(-width / 2, -height / 2, width, height);
+
+                    // draw the arrow
+                    ctx.beginPath();
+                    ctx.moveTo(0, -10); // move to the top of the arrow
+                    ctx.lineTo(10, 10); // draw a line to the right of the arrow
+                    ctx.lineTo(-10, 10); // draw a line to the left of the arrow
+                    ctx.closePath();
+                    ctx.fillStyle = "white";
+                    ctx.fill();
+                    ctx.restore();
+                    //draw the arm going .5m off the front of the robot forwards
+                    if(this.armExtended) {
+                        ctx.save();
+                        ctx.translate(x, y);
+                        ctx.rotate(this.angle + Math.PI / 2);
+                        ctx.fillStyle = "red";
+                        ctx.fillRect(0, -height * 2 + -height, 0.1 * PIXELS_PER_METER, 1.25 * PIXELS_PER_METER);
+                        ctx.restore();
+                    }
+
+
+
+
+                },
+                update: function (deltaTime) {
+                    //Set x,y, and angle to the position to go to if it will be there in the next frame
+                    if(movingToPos && Math.abs(this.x - posToGo.x) <= Math.abs(this.xSpeed * (deltaTime + 0.01)) && Math.abs(this.y - posToGo.y) <= Math.abs(this.ySpeed * (deltaTime + 0.01)) && Math.abs(this.angle - posToGo.angle) <= Math.abs(this.turnSpeed * (deltaTime + 0.01))) {
+                        drive(0, 0, 0)
+                        this.x = posToGo.x;
+                        this.y = posToGo.y;
+                        this.angle = posToGo.angle;
+                        movingToPos = false;
+                    } else {
+                        this.x += this.xSpeed * deltaTime;
+                        this.y += this.ySpeed * deltaTime;
+                        this.angle += this.turnSpeed * deltaTime;
+                    }
+                    if(this.angle > Math.PI) {
+                        this.angle -= 2 * Math.PI;
+                    } else if (this.angle < -Math.PI) {
+                        this.angle += 2 * Math.PI;
+                    }
+                },
+            };
+
+            function draw() {
+                ctx.clearRect(0, 0, CANVAS_WIDTH_PX, CANVAS_HEIGHT_PX);
+                robot.draw();
+                const coords = `(${robot.x.toFixed(2)}, ${robot.y.toFixed(2)}, ${robot.angle.toFixed(2)})`;
+                document.getElementById("coords").innerHTML = coords;
+            }
+
+            function update(deltaTime) {
+                robot.update(deltaTime);
+            }
+
+            function drive(xMetersVelocityPerSecond, yMetersVelocityPerSecond, radiansPerSecond) {
+                robot.xSpeed = xMetersVelocityPerSecond;
+                robot.ySpeed = yMetersVelocityPerSecond;
+                robot.turnSpeed = radiansPerSecond;
+            }
+
+            setInterval(() => {
+                const deltaTime = 0.01; // in seconds
+                update(deltaTime);
+                draw();
+            }, 10);
+
+            function goToPosition(x, y, angle, moveSpeed, turnSpeed) {
+                console.log("Moving to position: (" + x + ", " + y + ", " + angle + ")");
+                console.log("from position: (" + robot.x + ", " + robot.y + ", " + robot.angle + ")");
+                posToGo.x = x;
+                posToGo.y = y;
+                posToGo.angle = angle;
+
+                let xDist = Math.abs(robot.x - posToGo.x);
+                let yDist = Math.abs(robot.y - posToGo.y);
+                let rotationDist = getDistBetweenRadian(robot.angle, posToGo.angle);
+
+
+                //Set larger distance to 1.125 m/s and lower distance to arrive at same time, rotation is done so that it should be roughly the same time with a max of 3 rad/s
+                let xVelocity;
+                let yVelocity;
+                let rotationVelocity = turnSpeed;
+                if(Math.max(xDist, yDist) === xDist) {
+                    xVelocity = robot.x - posToGo.x < 0 ? moveSpeed : -moveSpeed;
+                    console.log("xVelocity 1: " + xVelocity)
+                    //if the rotation wouldn't finish in time, scale down the velocity
+                    if(rotationDist / rotationVelocity > Math.abs(xDist / xVelocity)) {
+                        xVelocity = (posToGo.x - robot.x) / (rotationDist / rotationVelocity);
+                        yVelocity = (posToGo.y - robot.y) / (rotationDist / rotationVelocity);
+                        console.log("xVelocity 2: " + xVelocity)
+                    } else {
+                        yVelocity = (robot.y - posToGo.y) / (robot.x - posToGo.x) * xVelocity;
+                    }
+                    //if the x/y wouldn't finish in time, scale down the rotation
+                    if(rotationDist / rotationVelocity < Math.abs(xDist / xVelocity)) {
+                        rotationVelocity /= xDist / Math.abs(xVelocity) / rotationDist * rotationVelocity;
+                    }
+
+                } else {
+                    yVelocity = robot.y - posToGo.y < 0 ? moveSpeed : -moveSpeed;
+                    //if the rotation wouldn't finish in time, scale down the velocity
+                    if(rotationDist / rotationVelocity > Math.abs(yDist / yVelocity)) {
+                        yVelocity = (posToGo.y - robot.y) / (rotationDist / rotationVelocity);
+                        xVelocity = (posToGo.x - robot.x) / (rotationDist / rotationVelocity);
+                    } else {
+                        xVelocity = (robot.x - posToGo.x) / (robot.y - posToGo.y) * yVelocity;
+                    }
+                    //if the x/y wouldn't finish in time, scale down the rotation
+                    if(rotationDist / rotationVelocity < Math.abs(yDist / yVelocity)) {
+                        rotationVelocity /= yDist / Math.abs(yVelocity) / rotationDist * rotationVelocity;
+                    }
+                }
+
+                let angleDiff = posToGo.angle - robot.angle;
+                if (angleDiff < -Math.PI) {
+                    angleDiff += 2 * Math.PI;
+                } else if (angleDiff > Math.PI) {
+                    angleDiff -= 2 * Math.PI;
+                }
+                if (angleDiff < 0) {
+                    rotationVelocity *= -1;
+                }
+
+
+
+                drive(xVelocity, yVelocity, rotationVelocity);
+                movingToPos = true;
+                console.log(`xVelocity: ${xVelocity}, yVelocity: ${yVelocity}, rotationVelocity: ${rotationVelocity})`);
+            }
+
+            function getDistBetweenRadian(rad1, rad2) {
+                //get closest distance between two radian values
+                let dist = Math.abs(rad1 - rad2);
+                if(dist > Math.PI) {
+                    dist = 2 * Math.PI - dist;
+                }
+                return Math.abs(dist);
+            }
+
+            function setPos(x, y, angle) {
+                robot.x = x;
+                robot.y = y;
+                robot.angle = angle;
+                movingToPos = false;
+                drive(0,0,0,0)
+            }
+
+            function setRobotSize(width, height) {
+                robot.width = width;
+                robot.height = height;
+            }
+
+
+            async function autoPlaceCommand() {
+                if(!(robot.y < 5.5 &&
+                    (robot.x < 3.3
+                        || robot.x > 13.2))) return;
+
+
+                let distBetween = 0.55;
+                for(let i = 0; i < 9; i++) {
+                    if(robot.y > 0.521626 + (i * distBetween) - distBetween / 2 &&
+                        robot.y < 0.521626 + (i * distBetween) + distBetween / 2) {
+                        let yToGoTo = 0.521626 + (i * distBetween);
+                        let xToGoTo;
+                        let closerXToGoTo;
+                        let yawToGoTo;
+
+                        if(robot.x < 3.3) {
+                            xToGoTo = 2.5;
+                            yawToGoTo = Math.PI;
+                            closerXToGoTo = 1.92;
+                        } else {
+                            xToGoTo = 14;
+                            closerXToGoTo = 14.58;
+                            yawToGoTo = 0;
+                        }
+                        goToPosition(xToGoTo, yToGoTo, yawToGoTo, 1.125, Math.PI);
+                        while(movingToPos) {
+                            await sleep(10);
+                        }
+                        robot.armExtended = true;
+                        await sleep(1000)
+                        goToPosition(closerXToGoTo, yToGoTo, yawToGoTo, 1.125, Math.PI);
+                        while(movingToPos) {
+                            await sleep(10);
+                        }
+                        await sleep(1000);
+                        goToPosition(xToGoTo, yToGoTo, yawToGoTo, 1.125, Math.PI);
+                        await sleep(1000);
+                        robot.armExtended = false;
+
+
+                        break;
+                    }
+                }
+            }
+
+            function sleep(ms) {
+                return new Promise(resolve => setTimeout(resolve, ms));
+            }
+
+            // Move Robot With Keyboard WASD for UP, LEFT, DOWN, RIGHT and QE for rotation only moving while key is pressed
+            document.addEventListener('keydown', function(event) {
+                if (event.key === "w") {
+                    drive(0, 4, 0);
+                } else if (event.key === "a") {
+                    drive(-4, 0, 0);
+                } else if (event.key === "s") {
+                    drive(0, -4, 0);
+                } else if (event.key === "d") {
+                    drive(4, 0, 0);
+                } else if (event.key === "q") {
+                    drive(0, 0, Math.PI * 2);
+                } else if (event.key === "e") {
+                    drive(0, 0, -Math.PI * 2);
+                }
+            });
+
+            document.addEventListener('keyup', function(event) {
+                if (event.key === "w" || event.key === "a" || event.key === "s" || event.key === "d" || event.key === "q" || event.key === "e") {
+                    drive(0, 0, 0);
+                }
+            });
+
+
+        </script>
+    </body>
+</html>
