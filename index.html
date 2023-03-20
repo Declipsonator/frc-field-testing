@@ -204,17 +204,16 @@
                 let xVelocity;
                 let yVelocity;
                 let rotationVelocity = turnSpeed;
-                if(Math.max(xDist, yDist) === xDist) {
+                if(xDist === 0 && yDist === 0 && rotationDist === 0) { return; }
+
+                if(rotationDist / rotationVelocity > Math.max(xDist, yDist) / moveSpeed) {
+                    console.log("me")
+                    xVelocity = (posToGo.x - robot.x) / (rotationDist / rotationVelocity);
+                    yVelocity = (posToGo.y - robot.y) / (rotationDist / rotationVelocity);
+                } else if(xDist >= yDist) {
                     xVelocity = robot.x - posToGo.x < 0 ? moveSpeed : -moveSpeed;
-                    console.log("xVelocity 1: " + xVelocity)
-                    //if the rotation wouldn't finish in time, scale down the velocity
-                    if(rotationDist / rotationVelocity > Math.abs(xDist / xVelocity)) {
-                        xVelocity = (posToGo.x - robot.x) / (rotationDist / rotationVelocity);
-                        yVelocity = (posToGo.y - robot.y) / (rotationDist / rotationVelocity);
-                        console.log("xVelocity 2: " + xVelocity)
-                    } else {
-                        yVelocity = (robot.y - posToGo.y) / (robot.x - posToGo.x) * xVelocity;
-                    }
+                    yVelocity = (robot.y - posToGo.y) / (robot.x - posToGo.x) * xVelocity;
+
                     //if the x/y wouldn't finish in time, scale down the rotation
                     if(rotationDist / rotationVelocity < Math.abs(xDist / xVelocity)) {
                         rotationVelocity /= xDist / Math.abs(xVelocity) / rotationDist * rotationVelocity;
@@ -222,19 +221,13 @@
 
                 } else {
                     yVelocity = robot.y - posToGo.y < 0 ? moveSpeed : -moveSpeed;
-                    //if the rotation wouldn't finish in time, scale down the velocity
-                    if(rotationDist / rotationVelocity > Math.abs(yDist / yVelocity)) {
-                        yVelocity = (posToGo.y - robot.y) / (rotationDist / rotationVelocity);
-                        xVelocity = (posToGo.x - robot.x) / (rotationDist / rotationVelocity);
-                    } else {
-                        xVelocity = (robot.x - posToGo.x) / (robot.y - posToGo.y) * yVelocity;
-                    }
+                    xVelocity = (robot.x - posToGo.x) / (robot.y - posToGo.y) * yVelocity;
+
                     //if the x/y wouldn't finish in time, scale down the rotation
                     if(rotationDist / rotationVelocity < Math.abs(yDist / yVelocity)) {
                         rotationVelocity /= yDist / Math.abs(yVelocity) / rotationDist * rotationVelocity;
                     }
                 }
-
                 let angleDiff = posToGo.angle - robot.angle;
                 if (angleDiff < -Math.PI) {
                     angleDiff += 2 * Math.PI;
