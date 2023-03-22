@@ -297,12 +297,12 @@
                             await sleep(10);
                         }
                         robot.armExtended = true;
-                        await sleep(1000)
+                        await sleep(100)
                         goToPosition(closerXToGoTo, yToGoTo, yawToGoTo, 1.125, Math.PI);
                         while(movingToPos) {
                             await sleep(10);
                         }
-                        await sleep(1000);
+                        await sleep(100);
                         goToPosition(xToGoTo, yToGoTo, yawToGoTo, 1.125, Math.PI);
                         await sleep(1000);
                         robot.armExtended = false;
